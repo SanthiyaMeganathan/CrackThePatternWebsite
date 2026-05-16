@@ -39,7 +39,7 @@ CREATE TRIGGER users_updated_at
 -- ─── Leaderboard Scores ──────────────────────────────────────
 CREATE TABLE IF NOT EXISTS leaderboard_scores (
   id                   UUID PRIMARY KEY DEFAULT gen_random_uuid(),
-  user_id              UUID REFERENCES users(id) ON DELETE CASCADE,
+  user_id              UUID REFERENCES users(id) ON DELETE SET NULL,  -- nullable: seed/anonymous entries allowed
   student_display_name TEXT NOT NULL,          -- anonymised or real name per user preference
   week_number          INTEGER NOT NULL,        -- 1-based week of the batch
   score                INTEGER NOT NULL,
