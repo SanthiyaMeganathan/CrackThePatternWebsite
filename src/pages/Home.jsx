@@ -1,10 +1,12 @@
 import React from "react";
 import { Link } from "react-router-dom";
 import { useDemoModal } from "../context/DemoModalContext";
+import { useEnrollGate } from "../hooks/useEnrollGate";
 import HowItWorksSection from "../components/HowItWorksSection";
 
 export default function Home() {
   const { openModal } = useDemoModal();
+  const handleEnroll = useEnrollGate();
 
   return (
     <div className="min-h-screen bg-gray-50 text-gray-900">

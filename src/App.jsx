@@ -4,14 +4,16 @@ import { BrowserRouter as Router, Routes, Route, useLocation } from "react-route
 // Providers
 import { AuthProvider } from "./context/AuthContext";
 import { DemoModalProvider } from "./context/DemoModalContext";
+import { AuthModalProvider } from "./context/AuthModalContext";
 
 // Layout components
 import Navbar from "./components/Navbar";
 import Footer from "./components/Footer";
 import DemoModal from "./components/DemoModal";
+import AuthModal from "./components/AuthModal";
 import ProtectedRoute from "./components/ProtectedRoute";
 
-// Schema components
+// Schema
 import FAQSchema from "./components/FAQSchema";
 import CourseSchema from "./components/CourseSchema";
 
@@ -22,19 +24,19 @@ import Leaderboard from "./pages/Leaderboard";
 import DemoMasterclass from "./pages/DemoMasterclass";
 import Checkout from "./pages/Checkout";
 import PaymentSuccess from "./pages/PaymentSuccess";
-import Login from "./pages/Login";
-import Dashboard from "./pages/Dashboard";
+import MyLearning from "./pages/MyLearning";
+import Dashboard from "./pages/Dashboard"; // kept as alias
 
-// Legacy pages (kept for SEO continuity — will redirect/show content)
+// Legacy SEO pages
 import About from "./pages/About";
 import Contact from "./pages/Contact";
 import FAQ from "./pages/FAQ";
 
 /**
- * Routes that should NOT show the global Navbar/Footer.
- * Checkout is a conversion-optimized page; Login/Dashboard have their own headers.
+ * Routes that render without the global Navbar/Footer.
+ * /my-learning has its own header so it's excluded here too.
  */
-const BARE_ROUTES = ["/checkout", "/login", "/dashboard", "/demo-masterclass", "/payment-success"];
+const BARE_ROUTES = ["/checkout", "/my-learning", "/dashboard", "/demo-masterclass", "/payment-success"];
 
 function AppLayout() {
   const location = useLocation();
@@ -44,46 +46,55 @@ function AppLayout() {
     <>
       <FAQSchema />
       <CourseSchema />
-      {/* Global modal — rendered at root so it appears above everything */}
+
+      {/* Global modals — rendered at root above all content */}
       <DemoModal />
+      <AuthModal />
 
       {!isBare && <Navbar />}
 
       <main className={!isBare ? "flex-grow" : ""}>
         <Routes>
-          {/* ── Public routes ─────────────────────────────────────────── */}
+          {/* ── Public ──────────────────────────────────────────────── */}
           <Route path="/" element={<Home />} />
           <Route path="/the-course" element={<TheCourse />} />
           <Route path="/leaderboard" element={<Leaderboard />} />
           <Route path="/demo-masterclass" element={<DemoMasterclass />} />
 
-          {/* ── Checkout funnel (bare layout) ─────────────────────────── */}
+          {/* ── Checkout funnel (bare, distraction-free) ────────────── */}
           <Route path="/checkout" element={<Checkout />} />
           <Route path="/payment-success" element={<PaymentSuccess />} />
 
-          {/* ── Auth ──────────────────────────────────────────────────── */}
-          <Route path="/login" element={<Login />} />
-
-          {/* ── Protected student dashboard ───────────────────────────── */}
+          {/* ── Protected: any authenticated user ───────────────────── */}
           <Route
-            path="/dashboard"
+            path="/my-learning"
             element={
               <ProtectedRoute>
-                <Dashboard />
+                <MyLearning />
               </ProtectedRoute>
             }
           />
 
-          {/* ── Legacy routes (kept for SEO / backlinks) ──────────────── */}
+          {/* Alias: /dashboard → /my-learning (backward compat) */}
+          <Route
+            path="/dashboard"
+            element={
+              <ProtectedRoute>
+                <MyLearning />
+              </ProtectedRoute>
+            }
+          />
+
+          {/* ── Legacy SEO routes ────────────────────────────────────── */}
           <Route path="/about" element={<About />} />
           <Route path="/contact" element={<Contact />} />
           <Route path="/faq" element={<FAQ />} />
 
-          {/* Old /courses and /syllabus → redirect to /the-course */}
+          {/* Old /courses + /syllabus → merged course page */}
           <Route path="/courses" element={<TheCourse />} />
           <Route path="/syllabus" element={<TheCourse />} />
 
-          {/* 404 fallback */}
+          {/* 404 */}
           <Route path="*" element={
             <div className="min-h-screen flex items-center justify-center text-center p-8">
               <div>
@@ -108,11 +119,13 @@ export default function App() {
   return (
     <Router>
       <AuthProvider>
-        <DemoModalProvider>
-          <div className="flex flex-col min-h-screen">
-            <AppLayout />
-          </div>
-        </DemoModalProvider>
+        <AuthModalProvider>
+          <DemoModalProvider>
+            <div className="flex flex-col min-h-screen">
+              <AppLayout />
+            </div>
+          </DemoModalProvider>
+        </AuthModalProvider>
       </AuthProvider>
     </Router>
   );

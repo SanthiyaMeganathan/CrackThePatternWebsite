@@ -1,14 +1,17 @@
 import React from "react";
-import { Navigate, useLocation } from "react-router-dom";
+import { useLocation } from "react-router-dom";
 import { useAuth } from "../context/AuthContext";
+import { useAuthModal } from "../context/AuthModalContext";
 
 /**
- * Wraps routes that require a valid paid session.
- * - No token → redirect to /login
- * - Has token → render children
+ * Wraps routes that require any authenticated session.
+ * - Loading → spinner
+ * - Not authenticated → open Auth Modal on Login slide (no URL change)
+ * - Authenticated (any status) → render children
  */
 export default function ProtectedRoute({ children }) {
   const { isAuthenticated, isLoading } = useAuth();
+  const { openAuthModal } = useAuthModal();
   const location = useLocation();
 
   if (isLoading) {
@@ -23,7 +26,14 @@ export default function ProtectedRoute({ children }) {
   }
 
   if (!isAuthenticated) {
-    return <Navigate to="/login" state={{ from: location }} replace />;
+    // Open auth modal instead of redirecting to a separate login page
+    openAuthModal("login");
+    // Render a minimal placeholder while the modal is open
+    return (
+      <div className="min-h-screen flex items-center justify-center bg-gray-50">
+        <p className="text-gray-400 text-sm">Please sign in to continue.</p>
+      </div>
+    );
   }
 
   return children;

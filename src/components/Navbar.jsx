@@ -2,10 +2,12 @@ import React, { useState, useEffect } from "react";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { useDemoModal } from "../context/DemoModalContext";
 import { useAuth } from "../context/AuthContext";
+import { useAuthModal } from "../context/AuthModalContext";
 
 export default function Navbar() {
   const { openModal } = useDemoModal();
   const { isAuthenticated, user, logout } = useAuth();
+  const { openAuthModal } = useAuthModal();
   const location = useLocation();
   const navigate = useNavigate();
   const [menuOpen, setMenuOpen] = useState(false);
@@ -57,7 +59,7 @@ export default function Navbar() {
           {navLink("/", "Home")}
           {navLink("/the-course", "The Course")}
           {navLink("/leaderboard", "Leaderboard")}
-          {isAuthenticated && navLink("/dashboard", "My Dashboard")}
+          {isAuthenticated && navLink("/my-learning", "My Learning")}
         </nav>
 
         {/* Desktop CTAs */}
@@ -73,12 +75,12 @@ export default function Navbar() {
               </button>
             </>
           ) : (
-            <Link
-              to="/login"
+            <button
+              onClick={() => openAuthModal("login")}
               className="text-sm font-medium text-gray-600 hover:text-blue-700 transition"
             >
-              Login
-            </Link>
+              Sign In
+            </button>
           )}
           <button
             onClick={openModal}
@@ -109,14 +111,14 @@ export default function Navbar() {
           <Link to="/the-course" className="block text-sm font-medium text-gray-700 py-1">The Course</Link>
           <Link to="/leaderboard" className="block text-sm font-medium text-gray-700 py-1">Leaderboard</Link>
           {isAuthenticated && (
-            <Link to="/dashboard" className="block text-sm font-medium text-gray-700 py-1">My Dashboard</Link>
+            <Link to="/my-learning" className="block text-sm font-medium text-gray-700 py-1">My Learning</Link>
           )}
           {isAuthenticated ? (
             <button onClick={handleLogout} className="block text-sm text-red-500 py-1">
               Logout
             </button>
           ) : (
-            <Link to="/login" className="block text-sm font-medium text-gray-600 py-1">Login</Link>
+            <button onClick={() => openAuthModal("login")} className="block text-sm font-medium text-gray-600 py-1">Sign In</button>
           )}
           <button
             onClick={openModal}

@@ -1,13 +1,13 @@
 const supabase = require("../db/supabase");
 
 /**
- * Middleware: validates the session token sent in the Authorization header
- * against the live value in the database.
+ * sessionGuard — validates the session token in the Authorization header.
  *
- * Header expected: Authorization: Bearer <sessionToken>
+ * Only verifies the token is current (device-eviction protection).
+ * Does NOT enforce account_status — individual routes that need paid-only
+ * access use the separate paidGuard middleware.
  *
  * Attaches req.user = { id, email, account_status } on success.
- * Returns 401 with reason 'device_eviction' when a newer session exists.
  */
 async function sessionGuard(req, res, next) {
   const authHeader = req.headers["authorization"] || "";
@@ -24,19 +24,28 @@ async function sessionGuard(req, res, next) {
     .single();
 
   if (error || !user) {
-    // Token doesn't match any row → could be eviction or invalid token
     return res.status(401).json({
       error: "Session invalid.",
       reason: "device_eviction",
     });
   }
 
-  if (user.account_status !== "Paid") {
-    return res.status(403).json({ error: "Access requires a paid account." });
-  }
-
   req.user = user;
   next();
 }
 
-module.exports = sessionGuard;
+/**
+ * paidGuard — must be chained AFTER sessionGuard.
+ * Returns 403 if the authenticated user has not paid yet.
+ */
+function paidGuard(req, res, next) {
+  if (req.user?.account_status !== "Paid") {
+    return res.status(403).json({
+      error: "Access requires a paid account.",
+      reason: "unpaid",
+    });
+  }
+  next();
+}
+
+module.exports = { sessionGuard, paidGuard };

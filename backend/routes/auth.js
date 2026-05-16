@@ -9,7 +9,6 @@ const resend = new Resend(process.env.RESEND_API_KEY);
 // ─── Helpers ──────────────────────────────────────────────────────────────
 
 function generateOTP() {
-  // Cryptographically random 6-digit OTP
   return String(crypto.randomInt(100000, 999999));
 }
 
@@ -38,11 +37,83 @@ async function sendOTPEmail(email, name, otp) {
   });
 }
 
+// ─── POST /api/v1/auth/signup ─────────────────────────────────────────────
+/**
+ * Body: { name, email, phone }
+ * Creates a new Lead-status user and sends OTP for first-time verification.
+ * Does NOT issue a session token directly — OTP verify-otp completes the flow.
+ */
+router.post("/signup", async (req, res) => {
+  const { name, email, phone } = req.body;
+
+  if (!name?.trim() || !email?.trim() || !phone?.trim()) {
+    return res.status(400).json({ error: "Name, email, and phone are required." });
+  }
+
+  const emailRx = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  if (!emailRx.test(email)) {
+    return res.status(400).json({ error: "Invalid email address." });
+  }
+
+  const phoneRx = /^[6-9]\d{9}$/;
+  if (!phoneRx.test(phone.replace(/\s/g, ""))) {
+    return res.status(400).json({ error: "Enter a valid 10-digit Indian mobile number." });
+  }
+
+  const cleanEmail = email.toLowerCase().trim();
+
+  // Check if user already exists
+  const { data: existing } = await supabase
+    .from("users")
+    .select("id, account_status")
+    .eq("email", cleanEmail)
+    .single();
+
+  if (existing) {
+    return res.status(409).json({
+      error: "An account with this email already exists. Please log in instead.",
+      redirect: "login",
+    });
+  }
+
+  // Create new Lead-status user
+  const { error: insertError } = await supabase
+    .from("users")
+    .insert({ name: name.trim(), email: cleanEmail, phone: phone.trim(), account_status: "Lead" });
+
+  if (insertError) {
+    console.error("[auth:signup]", insertError);
+    return res.status(500).json({ error: "Failed to create account. Please try again." });
+  }
+
+  // Generate and send OTP to verify email ownership
+  const otp = generateOTP();
+  const otpExpiresAt = new Date(Date.now() + 5 * 60 * 1000).toISOString();
+
+  await supabase
+    .from("users")
+    .update({ otp_code: otp, otp_expires_at: otpExpiresAt })
+    .eq("email", cleanEmail);
+
+  try {
+    await sendOTPEmail(cleanEmail, name.trim(), otp);
+  } catch (err) {
+    console.error("[auth:signup-email]", err);
+    return res.status(500).json({ error: "Account created but failed to send OTP. Please use login to continue." });
+  }
+
+  return res.status(201).json({
+    success: true,
+    message: "Account created! Check your email for the verification code.",
+    email: cleanEmail,
+  });
+});
+
 // ─── POST /api/v1/auth/request-otp ────────────────────────────────────────
 /**
  * Body: { email }
- * Checks paid status, generates OTP, sends email.
- * Returns 402 if user is not paid (redirect to checkout).
+ * Any registered user (Lead or Paid) can request an OTP.
+ * Returns 404 only if no account exists at all.
  */
 router.post("/request-otp", async (req, res) => {
   const { email } = req.body;
@@ -56,24 +127,18 @@ router.post("/request-otp", async (req, res) => {
     return res.status(400).json({ error: "Invalid email address." });
   }
 
+  const cleanEmail = email.toLowerCase().trim();
+
   const { data: user } = await supabase
     .from("users")
     .select("id, name, email, account_status")
-    .eq("email", email.toLowerCase().trim())
+    .eq("email", cleanEmail)
     .single();
 
   if (!user) {
-    // Don't reveal whether email exists — guide to checkout
-    return res.status(402).json({
-      error: "No paid account found for this email.",
-      redirect: "/checkout",
-    });
-  }
-
-  if (user.account_status !== "Paid") {
-    return res.status(402).json({
-      error: "Your account is not yet activated. Please complete payment to access the course.",
-      redirect: "/checkout",
+    return res.status(404).json({
+      error: "No account found with this email. Please sign up first.",
+      redirect: "signup",
     });
   }
 
@@ -94,15 +159,16 @@ router.post("/request-otp", async (req, res) => {
 
   return res.json({
     success: true,
-    message: "OTP sent to your registered email address.",
+    message: "Login code sent to your email address.",
   });
 });
 
 // ─── POST /api/v1/auth/verify-otp ─────────────────────────────────────────
 /**
  * Body: { email, otp }
- * Verifies OTP, issues a new session token (overwrites old one → single-session).
- * Returns sessionToken + user info.
+ * Works for any registered user regardless of account_status.
+ * Returns sessionToken + user info including account_status so the
+ * frontend can route accordingly (paid → dashboard, lead → my-learning empty state).
  */
 router.post("/verify-otp", async (req, res) => {
   const { email, otp } = req.body;
@@ -121,10 +187,6 @@ router.post("/verify-otp", async (req, res) => {
     return res.status(401).json({ error: "Invalid credentials." });
   }
 
-  if (user.account_status !== "Paid") {
-    return res.status(402).json({ error: "Account not activated.", redirect: "/checkout" });
-  }
-
   if (!user.otp_code || user.otp_code !== otp) {
     return res.status(401).json({ error: "Incorrect OTP. Please check your email." });
   }
@@ -133,7 +195,7 @@ router.post("/verify-otp", async (req, res) => {
     return res.status(401).json({ error: "OTP has expired. Please request a new one." });
   }
 
-  // ✅ Valid — issue new session token (single-session: this overwrites any existing token)
+  // ✅ Issue new session token (single-session: overwrites any existing)
   const sessionToken = generateSessionToken();
 
   await supabase
@@ -152,6 +214,7 @@ router.post("/verify-otp", async (req, res) => {
       id: user.id,
       name: user.name,
       email: user.email,
+      accountStatus: user.account_status, // 'Lead' | 'Paid' — frontend routes based on this
     },
   });
 });
@@ -159,8 +222,9 @@ router.post("/verify-otp", async (req, res) => {
 // ─── POST /api/v1/auth/validate-session ───────────────────────────────────
 /**
  * Body: { token }
- * Compares client token against DB. Used for polling-based session eviction.
- * Returns { valid: true } or { valid: false, reason: 'device_eviction' }
+ * Validates token is still the current active session.
+ * Returns { valid, accountStatus } — does NOT require Paid status.
+ * The frontend uses accountStatus to update UI state if payment completes mid-session.
  */
 router.post("/validate-session", async (req, res) => {
   const { token } = req.body;
@@ -179,11 +243,7 @@ router.post("/validate-session", async (req, res) => {
     return res.json({ valid: false, reason: "device_eviction" });
   }
 
-  if (user.account_status !== "Paid") {
-    return res.json({ valid: false, reason: "unpaid" });
-  }
-
-  return res.json({ valid: true });
+  return res.json({ valid: true, accountStatus: user.account_status });
 });
 
 // ─── POST /api/v1/auth/logout ─────────────────────────────────────────────

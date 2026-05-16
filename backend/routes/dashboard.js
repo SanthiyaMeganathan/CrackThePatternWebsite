@@ -1,7 +1,7 @@
 const express = require("express");
 const router = express.Router();
 const supabase = require("../db/supabase");
-const sessionGuard = require("../middleware/sessionGuard");
+const { sessionGuard, paidGuard } = require("../middleware/sessionGuard");
 
 const SIGNED_URL_TTL = 900; // 15 minutes in seconds
 
@@ -10,7 +10,7 @@ const SIGNED_URL_TTL = 900; // 15 minutes in seconds
  * Protected. Returns course modules with freshly signed, short-lived URLs.
  * Raw storage paths are NEVER sent to the client.
  */
-router.get("/modules", sessionGuard, async (req, res) => {
+router.get("/modules", sessionGuard, paidGuard, async (req, res) => {
   try {
     const { data: modules, error } = await supabase
       .from("course_modules")
@@ -62,7 +62,7 @@ router.get("/modules", sessionGuard, async (req, res) => {
  * GET /api/v1/dashboard/me
  * Protected. Returns the authenticated student's profile.
  */
-router.get("/me", sessionGuard, async (req, res) => {
+router.get("/me", sessionGuard, async (req, res) => { // any authenticated user
   return res.json({
     success: true,
     user: {

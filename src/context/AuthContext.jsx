@@ -1,12 +1,12 @@
 import React, { createContext, useContext, useState, useEffect, useRef, useCallback } from "react";
 
 const API = import.meta.env.VITE_API_URL || "http://localhost:4000/api/v1";
-const POLL_INTERVAL_MS = 60_000; // 1 minute
+const POLL_INTERVAL_MS = 60_000;
 
 const AuthContext = createContext(null);
 
 export function AuthProvider({ children }) {
-  const [user, setUser] = useState(null);
+  const [user, setUser] = useState(null);           // { id, name, email, accountStatus }
   const [sessionToken, setSessionToken] = useState(null);
   const [evictionMessage, setEvictionMessage] = useState("");
   const [isLoading, setIsLoading] = useState(true);
@@ -23,7 +23,7 @@ export function AuthProvider({ children }) {
     setIsLoading(false);
   }, []);
 
-  // ── Session validation + eviction polling ────────────────────────────────
+  // ── Session validation + eviction + accountStatus sync ─────────────────
   const validateSession = useCallback(async (token) => {
     if (!token) return;
     try {
@@ -35,13 +35,23 @@ export function AuthProvider({ children }) {
       const data = await res.json();
 
       if (!data.valid) {
-        // Token mismatch — evict this session
         clearAuth();
         if (data.reason === "device_eviction") {
           setEvictionMessage(
             "You have been logged out because this account was accessed on another device."
           );
         }
+        return;
+      }
+
+      // Sync accountStatus in case payment webhook fired mid-session
+      if (data.accountStatus) {
+        setUser((prev) => {
+          if (!prev || prev.accountStatus === data.accountStatus) return prev;
+          const updated = { ...prev, accountStatus: data.accountStatus };
+          localStorage.setItem("ctp_user", JSON.stringify(updated));
+          return updated;
+        });
       }
     } catch {
       // Network error — silent fail, retry next poll
@@ -50,10 +60,7 @@ export function AuthProvider({ children }) {
 
   useEffect(() => {
     if (sessionToken) {
-      // Immediate check on token change
       validateSession(sessionToken);
-
-      // Polling
       pollRef.current = setInterval(() => validateSession(sessionToken), POLL_INTERVAL_MS);
     }
     return () => clearInterval(pollRef.current);
@@ -61,6 +68,7 @@ export function AuthProvider({ children }) {
 
   // ── Auth helpers ─────────────────────────────────────────────────────────
   function login(token, userData) {
+    // userData must include accountStatus from verify-otp response
     localStorage.setItem("ctp_session_token", token);
     localStorage.setItem("ctp_user", JSON.stringify(userData));
     setSessionToken(token);
@@ -87,6 +95,7 @@ export function AuthProvider({ children }) {
   }
 
   const isAuthenticated = !!sessionToken && !!user;
+  const isPaid = user?.accountStatus === "Paid";
 
   return (
     <AuthContext.Provider
@@ -94,6 +103,7 @@ export function AuthProvider({ children }) {
         user,
         sessionToken,
         isAuthenticated,
+        isPaid,
         isLoading,
         evictionMessage,
         login,

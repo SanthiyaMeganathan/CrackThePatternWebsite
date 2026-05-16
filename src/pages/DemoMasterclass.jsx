@@ -1,5 +1,6 @@
 import React, { useEffect, useRef } from "react";
 import { useNavigate, Link } from "react-router-dom";
+import { useEnrollGate } from "../hooks/useEnrollGate";
 
 // ── Replace this with your actual video embed URL ─────────────────────────
 // YouTube: "https://www.youtube.com/embed/VIDEO_ID?rel=0&modestbranding=1&controls=1"
@@ -11,6 +12,7 @@ const DEMO_VIDEO_EMBED_URL =
 
 export default function DemoMasterclass() {
   const navigate = useNavigate();
+  const handleEnroll = useEnrollGate();
   const name = sessionStorage.getItem("ctp_lead_name") || "";
   const videoRef = useRef(null);
 
@@ -96,12 +98,12 @@ export default function DemoMasterclass() {
             weekly tests, and lifetime access to recordings.
           </p>
           <div className="flex flex-col sm:flex-row gap-4 justify-center">
-            <Link
-              to="/checkout"
+            <button
+              onClick={handleEnroll}
               className="inline-block bg-yellow-400 hover:bg-yellow-300 text-blue-900 font-bold px-10 py-4 rounded-xl text-lg shadow-lg transition animate-pulse-glow"
             >
               Enroll in Course Now – ₹4,999 →
-            </Link>
+            </button>
           </div>
           <p className="text-blue-400 text-xs mt-4">
             ✔ Secure payment via Razorpay · UPI, Cards, Net Banking accepted

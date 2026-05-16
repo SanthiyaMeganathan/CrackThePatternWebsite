@@ -1,5 +1,6 @@
 import React, { useState } from "react";
 import { useDemoModal } from "../context/DemoModalContext";
+import { useEnrollGate } from "../hooks/useEnrollGate";
 
 const syllabusTopics = [
   {
@@ -79,6 +80,7 @@ function AccordionItem({ item }) {
 
 export default function TheCourse() {
   const { openModal } = useDemoModal();
+  const handleEnroll = useEnrollGate();
 
   return (
     <div className="min-h-screen bg-gray-50 text-gray-900">
@@ -102,12 +104,12 @@ export default function TheCourse() {
             >
               Watch Free Demo First 🎥
             </button>
-            <a
-              href="/checkout"
+            <button
+              onClick={handleEnroll}
               className="border-2 border-white text-white hover:bg-white hover:text-blue-900 font-bold px-8 py-4 rounded-xl text-base transition"
             >
               Enroll Now – ₹4,999
-            </a>
+            </button>
           </div>
           <div className="mt-6 flex flex-wrap justify-center gap-6 text-blue-200 text-sm">
             <span>✔ 3 Live Sessions/Week</span>
@@ -209,12 +211,12 @@ export default function TheCourse() {
             >
               Watch Free Demo 🎥
             </button>
-            <a
-              href="/checkout"
+            <button
+              onClick={handleEnroll}
               className="bg-blue-900 hover:bg-blue-800 text-white font-bold px-8 py-4 rounded-xl text-base transition"
             >
               Enroll Now – ₹4,999
-            </a>
+            </button>
           </div>
         </div>
       </section>
