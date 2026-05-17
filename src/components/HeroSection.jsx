@@ -1,7 +1,10 @@
 import React from "react";
 import DemoFormCard from "./DemoFormCard";
+import { useDemoModal } from "../context/DemoModalContext";
 
 export default function HeroSection() {
+  const { openModal } = useDemoModal();
+
   return (
     <section className="max-w-6xl mx-auto px-6 py-16 grid grid-cols-1 md:grid-cols-2 gap-8 items-center">
       <div>
@@ -15,7 +18,9 @@ export default function HeroSection() {
           Crack The Pattern provides online aptitude coaching for campus placements, covering quantitative aptitude, logical reasoning, and verbal ability using a pattern-based approach.
         </p>
         <div className="mt-6 flex gap-4">
-          <button className="bg-blue-700 text-white px-6 py-3 rounded-md font-semibold">
+          <button 
+            onClick={openModal}
+            className="bg-blue-700 text-white px-6 py-3 rounded-md font-semibold">
             Join Free Aptitude Demo
           </button>
           <button className="border border-blue-700 text-blue-700 px-6 py-3 rounded-md font-semibold">

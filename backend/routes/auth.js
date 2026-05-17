@@ -6,6 +6,19 @@ const supabase = require("../db/supabase");
 
 const resend = new Resend(process.env.RESEND_API_KEY);
 
+// ─── In-Memory Staging for Signups (Bot Protection) ───────────────────────
+const pendingSignups = new Map();
+
+// Cleanup expired signups every 10 minutes to free memory
+setInterval(() => {
+  const now = Date.now();
+  for (const [email, data] of pendingSignups.entries()) {
+    if (now > data.expiresAt) {
+      pendingSignups.delete(email);
+    }
+  }
+}, 10 * 60 * 1000);
+
 // ─── Helpers ──────────────────────────────────────────────────────────────
 
 function generateOTP() {
@@ -76,30 +89,24 @@ router.post("/signup", async (req, res) => {
     });
   }
 
-  // Create new Lead-status user
-  const { error: insertError } = await supabase
-    .from("users")
-    .insert({ name: name.trim(), email: cleanEmail, phone: phone.trim(), account_status: "Lead" });
-
-  if (insertError) {
-    console.error("[auth:signup]", insertError);
-    return res.status(500).json({ error: "Failed to create account. Please try again." });
-  }
-
-  // Generate and send OTP to verify email ownership
+  // Generate OTP
   const otp = generateOTP();
-  const otpExpiresAt = new Date(Date.now() + 5 * 60 * 1000).toISOString();
+  const expiresAt = Date.now() + 5 * 60 * 1000; // 5 mins
 
-  await supabase
-    .from("users")
-    .update({ otp_code: otp, otp_expires_at: otpExpiresAt })
-    .eq("email", cleanEmail);
+  // Store in memory instead of database (Bot Protection)
+  pendingSignups.set(cleanEmail, {
+    name: name.trim(),
+    phone: phone.trim(),
+    otp,
+    expiresAt
+  });
 
   try {
     await sendOTPEmail(cleanEmail, name.trim(), otp);
   } catch (err) {
     console.error("[auth:signup-email]", err);
-    return res.status(500).json({ error: "Account created but failed to send OTP. Please use login to continue." });
+    pendingSignups.delete(cleanEmail);
+    return res.status(500).json({ error: "Account staged but failed to send OTP. Please try again." });
   }
 
   return res.status(201).json({
@@ -136,6 +143,21 @@ router.post("/request-otp", async (req, res) => {
     .single();
 
   if (!user) {
+    // Check if they are in the middle of signing up
+    const pending = pendingSignups.get(cleanEmail);
+    if (pending) {
+      const otp = generateOTP();
+      pending.otp = otp;
+      pending.expiresAt = Date.now() + 5 * 60 * 1000;
+      
+      try {
+        await sendOTPEmail(cleanEmail, pending.name, otp);
+        return res.json({ success: true, message: "New login code sent." });
+      } catch (err) {
+        return res.status(500).json({ error: "Failed to send OTP email." });
+      }
+    }
+
     return res.status(404).json({
       error: "No account found with this email. Please sign up first.",
       redirect: "signup",
@@ -215,6 +237,71 @@ router.post("/verify-otp", async (req, res) => {
       name: user.name,
       email: user.email,
       accountStatus: user.account_status, // 'Lead' | 'Paid' — frontend routes based on this
+    },
+  });
+});
+
+// ─── POST /api/v1/auth/verify-signup ────────────────────────────────────────
+/**
+ * Body: { email, otp }
+ * Verifies pending signup and officially provisions account in `users` table.
+ */
+router.post("/verify-signup", async (req, res) => {
+  const { email, otp } = req.body;
+
+  if (!email || !otp) {
+    return res.status(400).json({ error: "Email and OTP are required." });
+  }
+
+  const cleanEmail = email.toLowerCase().trim();
+
+  // Retrieve from memory cache
+  const pending = pendingSignups.get(cleanEmail);
+
+  if (!pending) {
+    return res.status(401).json({ error: "No pending registration found or it has expired." });
+  }
+
+  if (pending.otp !== otp) {
+    return res.status(401).json({ error: "Incorrect OTP. Please check your email." });
+  }
+
+  if (Date.now() > pending.expiresAt) {
+    pendingSignups.delete(cleanEmail);
+    return res.status(401).json({ error: "OTP has expired. Please try signing up again." });
+  }
+
+  // ✅ Provision official account in users table
+  const sessionToken = generateSessionToken();
+
+  const { data: newUser, error: createUserError } = await supabase
+    .from("users")
+    .insert({
+      name: pending.name,
+      email: cleanEmail,
+      phone: pending.phone,
+      account_status: "Lead",
+      current_session_token: sessionToken
+    })
+    .select("id, name, email, account_status")
+    .single();
+
+  if (createUserError) {
+    console.error("[auth:verify-signup-create]", createUserError);
+    return res.status(500).json({ error: "Failed to provision account. Please try again." });
+  }
+
+  // Clean up memory cache
+  pendingSignups.delete(cleanEmail);
+
+  return res.json({
+    success: true,
+    sessionToken,
+    user: {
+      id: newUser.id,
+      name: newUser.name,
+      email: newUser.email,
+      accountStatus: newUser.account_status,
     },
   });
 });

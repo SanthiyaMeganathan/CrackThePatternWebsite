@@ -1,6 +1,9 @@
 import React from "react";
+import { useEnrollGate } from "../hooks/useEnrollGate";
 
 export default function CourseSection() {
+  const handleEnroll = useEnrollGate();
+
   return (
     <>
       {/* COURSES */}
@@ -80,7 +83,9 @@ export default function CourseSection() {
               <button className="bg-blue-700 text-white px-5 py-2 rounded font-medium hover:bg-blue-800 transition">
                 View Program Details
               </button>
-              <button className="border border-blue-700 text-blue-700 px-5 py-2 rounded font-medium hover:bg-blue-50 transition">
+              <button 
+                onClick={handleEnroll}
+                className="border border-blue-700 text-blue-700 px-5 py-2 rounded font-medium hover:bg-blue-50 transition">
                 Enroll Now
               </button>
             </div>

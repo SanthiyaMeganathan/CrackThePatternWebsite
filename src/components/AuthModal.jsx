@@ -57,6 +57,8 @@ export default function AuthModal() {
 
   // ── Slide: 'login' | 'signup'
   const [slide, setSlide] = useState("login");
+  const [authFlow, setAuthFlow] = useState(""); // 'login' | 'signup'
+  
   // ── OTP step — shared by both login and signup after email/form submission
   const [otpPending, setOtpPending] = useState(false);
   const [pendingEmail, setPendingEmail] = useState("");
@@ -101,6 +103,7 @@ export default function AuthModal() {
   }, []); // eslint-disable-line
 
   function resetAll() {
+    setAuthFlow("");
     setOtpPending(false);
     setPendingEmail("");
     setLoginEmail("");
@@ -163,6 +166,7 @@ export default function AuthModal() {
       setOtp(Array(6).fill(""));
       setOtpError("");
       setOtpInfo("OTP sent! Check your inbox.");
+      setAuthFlow("login");
       setOtpPending(true);
     } catch {
       setLoginError("Network error. Please try again.");
@@ -220,6 +224,7 @@ export default function AuthModal() {
       setOtp(Array(6).fill(""));
       setOtpError("");
       setOtpInfo("Account created! Enter the code we emailed you.");
+      setAuthFlow("signup");
       setOtpPending(true);
     } catch {
       setSignupError("Network error. Please try again.");
@@ -237,7 +242,8 @@ export default function AuthModal() {
 
     setOtpLoading(true);
     try {
-      const res = await fetch(`${API}/auth/verify-otp`, {
+      const endpoint = authFlow === "signup" ? "/auth/verify-signup" : "/auth/verify-otp";
+      const res = await fetch(`${API}${endpoint}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ email: pendingEmail, otp: otpStr }),
